@@ -15,10 +15,11 @@ const TOOL_MAP = {
     url: '/apps/test-case-generator/',
     embeddable: true,
     steps: [
-      '輸入需求或功能描述。',
-      '設定輸出類型與測試維度。',
-      '產生測案並檢查欄位完整性。',
-      '匯出或複製結果給 QA / 開發使用。'
+      '先選擇模式：新舊規格比對，或匯入Case比對新版。',
+      '新舊規格模式：上傳新版 PDF（必要）與舊版 PDF（選填），可搭配快取版本。',
+      '匯入Case模式：上傳新版 PDF + Baseline TestCase（CSV/XLSX，使用模板欄位）。',
+      '視需要調整對應提示詞 Tab，點擊開始分析後檢查新增/失效/取代結果。',
+      '確認結果後匯出 XLSX，交付 QA / 開發使用。'
     ]
   },
   '500x': {
@@ -50,10 +51,16 @@ const TOOL_MAP = {
 };
 
 const toolTitle = document.getElementById('tool-title');
+const btnReadme = document.getElementById('btn-readme');
 const btnReload = document.getElementById('btn-reload');
 const guide = document.getElementById('guide');
 const embedWrap = document.getElementById('embed-wrap');
 const navButtons = Array.from(document.querySelectorAll('.nav-btn'));
+const readmeModal = document.getElementById('readme-modal');
+const readmeTitle = document.getElementById('readme-title');
+const readmeContent = document.getElementById('readme-content');
+const readmeCloseBtn = document.getElementById('readme-close-btn');
+const readmeCloseBackdrop = document.getElementById('readme-close-backdrop');
 
 let currentTool = 'img-compare';
 let frontLogScriptCache = '';
@@ -161,6 +168,122 @@ function showToolFrame(tool, url) {
   frame.style.display = 'block';
 }
 
+function escapeHtml(text) {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+function markdownToHtml(markdown) {
+  const lines = markdown.replaceAll('\r\n', '\n').split('\n');
+  const html = [];
+  let inCodeBlock = false;
+  let inList = false;
+
+  for (const line of lines) {
+    if (line.startsWith('```')) {
+      if (!inCodeBlock) {
+        if (inList) {
+          html.push('</ul>');
+          inList = false;
+        }
+        html.push('<pre><code>');
+      } else {
+        html.push('</code></pre>');
+      }
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+
+    if (inCodeBlock) {
+      html.push(`${escapeHtml(line)}\n`);
+      continue;
+    }
+
+    if (line.startsWith('# ')) {
+      if (inList) {
+        html.push('</ul>');
+        inList = false;
+      }
+      html.push(`<h1>${escapeHtml(line.slice(2))}</h1>`);
+      continue;
+    }
+
+    if (line.startsWith('## ')) {
+      if (inList) {
+        html.push('</ul>');
+        inList = false;
+      }
+      html.push(`<h2>${escapeHtml(line.slice(3))}</h2>`);
+      continue;
+    }
+
+    if (line.startsWith('### ')) {
+      if (inList) {
+        html.push('</ul>');
+        inList = false;
+      }
+      html.push(`<h3>${escapeHtml(line.slice(4))}</h3>`);
+      continue;
+    }
+
+    if (line.startsWith('- ')) {
+      if (!inList) {
+        html.push('<ul>');
+        inList = true;
+      }
+      html.push(`<li>${escapeHtml(line.slice(2))}</li>`);
+      continue;
+    }
+
+    if (!line.trim()) {
+      if (inList) {
+        html.push('</ul>');
+        inList = false;
+      }
+      html.push('<p></p>');
+      continue;
+    }
+
+    if (inList) {
+      html.push('</ul>');
+      inList = false;
+    }
+
+    const withInlineCode = escapeHtml(line).replace(/`([^`]+)`/g, '<code>$1</code>');
+    html.push(`<p>${withInlineCode}</p>`);
+  }
+
+  if (inList) html.push('</ul>');
+  if (inCodeBlock) html.push('</code></pre>');
+  return html.join('');
+}
+
+async function openReadmeModal() {
+  const data = TOOL_MAP[currentTool];
+  readmeTitle.textContent = `${data.title} 說明`;
+  readmeContent.innerHTML = '<p>讀取中...</p>';
+  readmeModal.classList.remove('hidden');
+  readmeModal.setAttribute('aria-hidden', 'false');
+
+  try {
+    const res = await fetch(`/api/docs/${encodeURIComponent(currentTool)}`, { cache: 'no-store' });
+    if (!res.ok) {
+      throw new Error(`readme load failed: ${res.status}`);
+    }
+    const payload = await res.json();
+    readmeContent.innerHTML = markdownToHtml(payload.markdown || '');
+  } catch (_e) {
+    readmeContent.innerHTML = '<p>找不到此工具 README，請確認工具目錄下有 README.md。</p>';
+  }
+}
+
+function closeReadmeModal() {
+  readmeModal.classList.add('hidden');
+  readmeModal.setAttribute('aria-hidden', 'true');
+}
+
 btnReload.addEventListener('click', () => {
   const data = TOOL_MAP[currentTool];
   if (!data || !data.embeddable || !data.url) return;
@@ -173,6 +296,15 @@ navButtons.forEach((btn) => {
   btn.addEventListener('click', async () => {
     await renderTool(btn.dataset.tool);
   });
+});
+
+btnReadme.addEventListener('click', openReadmeModal);
+readmeCloseBtn.addEventListener('click', closeReadmeModal);
+readmeCloseBackdrop.addEventListener('click', closeReadmeModal);
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !readmeModal.classList.contains('hidden')) {
+    closeReadmeModal();
+  }
 });
 
 renderTool(currentTool);
