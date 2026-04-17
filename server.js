@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
@@ -11,6 +12,14 @@ const hubDir = __dirname;
 const toolsRoot = path.resolve(__dirname, '..');
 const testCaseGeneratorDir = path.join(toolsRoot, 'test-case-generator');
 const frontLogCheckerScript = path.join(toolsRoot, 'front-log-checker', 'intercept.js');
+const readmeMap = {
+  'img-compare': path.join(toolsRoot, 'img-compare', 'README.md'),
+  'test-case-generator': path.join(toolsRoot, 'test-case-generator', 'README.md'),
+  '500x': path.join(toolsRoot, '500x', 'README.md'),
+  'tools-hub': path.join(hubDir, 'README.md'),
+  'front-log-checker': path.join(toolsRoot, 'front-log-checker', 'README.md'),
+  'front-log-compare': path.join(toolsRoot, 'front-log-compare', 'README.md')
+};
 
 app.use(express.static(hubDir));
 
@@ -51,6 +60,26 @@ app.use(
     pathRewrite: (path) => `/api${path}`
   })
 );
+
+app.get('/api/docs/:tool', (req, res) => {
+  const tool = req.params.tool;
+  const readmePath = readmeMap[tool];
+
+  if (!readmePath) {
+    return res.status(404).json({ error: 'unknown tool' });
+  }
+
+  if (!fs.existsSync(readmePath)) {
+    return res.status(404).json({ error: 'readme not found' });
+  }
+
+  try {
+    const markdown = fs.readFileSync(readmePath, 'utf8');
+    return res.json({ tool, markdown });
+  } catch (_err) {
+    return res.status(500).json({ error: 'failed to load readme' });
+  }
+});
 
 app.use(
   '/api',

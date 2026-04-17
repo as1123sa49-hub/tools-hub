@@ -8,6 +8,7 @@
 - 測案產生器（`test-case-generator`）：可 iframe 內嵌（支援新舊規格比對、匯入Case比對新版）
 - 500X 機率統計（`500x`）：可 iframe 內嵌（Hub 代理至 500x 服務）
 - 前端 LOG 驗證（`front-log-checker`）：提供 Console 一鍵複製完整腳本
+- LOG 結構比對（`front-log-compare`）：上傳兩份 JSON（原始）並產出差異 CSV
 
 ## 啟動方式（單一入口）
 
